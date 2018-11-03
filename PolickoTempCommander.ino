@@ -20,48 +20,6 @@ DeviceAddress s4 = { 0x28, 0xFF, 0x4E, 0x07, 0x01, 0x16, 0x03, 0x8A }; // normal
 DeviceAddress s5 = { 0x28, 0xFF, 0x8D, 0xF3, 0x87, 0x16, 0x03, 0x2A }; // normal temp sensor                      Loznice 
 DeviceAddress s6 = { 0x28, 0xFF, 0x99, 0xE2, 0x00, 0x16, 0x03, 0xE6 }; // normal temp sensor                      Studna
 DeviceAddress s7 = { 0x28, 0xFF, 0xF9, 0xB5, 0x87, 0x16, 0x03, 0xB1 }; // high temp sensor                      Koupelna podlaha
-/*
-
-uint8_t pin2[][8] = {
-  {
-0x28, 0x62, 0xAD, 0xC4, 0x04, 0x00, 0x00, 0xC5  },
-  {
-0x28, 0xFF, 0x4E, 0x07, 0x01, 0x16, 0x03, 0x8A  },
-  {
-0x28, 0xFF, 0x19, 0x20, 0x01, 0x16, 0x03, 0xB8  },
-  {
-0x28, 0xFF, 0x99, 0xE2, 0x00, 0x16, 0x03, 0xE6  },
-  {
-0x28, 0xFF, 0xF9, 0xB5, 0x87, 0x16, 0x03, 0xB1  },
-  {
-0x28, 0xFF, 0x8D, 0xF3, 0x87, 0x16, 0x03, 0x2A  },
-  {
-0x28, 0xFF, 0x13, 0x3E, 0x01, 0x16, 0x03, 0x28  },
-};
-
-
-Use Example sketch at Onewire library example dir called DS18x20_Temperature.pde to get the adress values
-ROM = 28 A8 20 B6 6 0 0 52
-ROM = 28 A4 98 B4 6 0 0 59
-ROM = 28 3A 78 B5 6 0 0 AE
-ROM = 28 1E CE B5 6 0 0 17
-ROM = 28 9 8A B4 6 0 0 B0
-ROM = 28 F9 57 B6 6 0 0 77
-ROM = 28 63 8 B7 6 0 0 7C
-
-
-
-
-
-ROM = 28 FF 13 3E 1 16 3 28
-  Chip = DS18B20
-  Data = 1 4D 1 4B 46 7F FF C 10 C0  CRC=C0
-  Temperature = 20.81 Celsius, 69.46 Fahrenheit
-No more addresses.
-
-
-
-*/
 
 //////////////// Values for automatic mode aka thermostatic mode ////////////////////////////////////////////////
 const float temp1Min = 21.0; // if temperature is below this level (s1), Relay 1 will be switched on, until... 
@@ -83,18 +41,15 @@ const byte relayOneLed = 4; // Pin for relay1 status led
 const byte relayTwoLed = 5; // Pin for relay2 status led
 const byte analogSwitchPin = A5; // Use A5 as analog input for switches
 
-const byte pinButton1 = 2; // Pin button 1
+const byte pinButton1 = A4; // Pin button 1
 const byte pinButton2 = 8; // Pin button 2
 const byte pinButton3 = 9; // Pin button 3
-
-byte bs; // bounce state;
 
 const byte mac[] = { 0xDE, 0x00, 0xBA, 0xEF, 0x88, 0x73 };
 const byte ip[] = { 192, 168, 11, 208 };
 const byte gateway[] = { 192, 168, 11, 1 };
 const byte subnet[] = { 255, 255, 255, 0 };
 const EthernetServer server(80);
-
 
 float temp1;
 float temp2;
@@ -111,6 +66,11 @@ String requestString;
 int buttonValue; //Stores analog value when button is pressed
 unsigned long lastSensorReading = 0;  // the last time the sensors are called...
 unsigned long lastButtonPressed = 0;  // the last time a button was pressed...
+
+long lastDebounceTime = 0;  // the last time the output pin1 was toggled
+long lastDebounceTime2 = 0;  // the last time the output pin2 was toggled
+long lastDebounceTime3 = 0;  // the last time the output pin3 was toggled
+long debounceDelay = 50;    // the debounce time; increase if the output flickers
 
 void setup(void)
 {
@@ -137,14 +97,13 @@ void setup(void)
 	Serial.println(Ethernet.localIP());
 #endif
 
-
 	pinMode(manualLed, OUTPUT);
 	pinMode(relayOneLed, OUTPUT);
 	pinMode(relayTwoLed, OUTPUT);
 
-	pinMode(pinButton1, INPUT);
-	pinMode(pinButton2, INPUT);
-	pinMode(pinButton3, INPUT);
+	pinMode(pinButton1, INPUT_PULLUP);
+	pinMode(pinButton2, INPUT_PULLUP);
+	pinMode(pinButton3, INPUT_PULLUP);
 
 	digitalWrite(relais1, LOW);
 	digitalWrite(relais2, LOW);
@@ -202,7 +161,7 @@ float getTemperature(DeviceAddress deviceAddress, bool isHighTempSensor)
 
 void loop(void)
 {
-  unsigned long currentMillis = millis();
+	unsigned long currentMillis = millis();
 	boolean isNotLocked = (lastButtonPressed + 500 < currentMillis); // locktime is set to 500ms...
 
 	if ((lastSensorReading + readSensorsEvery) < currentMillis)
@@ -250,7 +209,7 @@ void loop(void)
 	
 #ifdef SERIALDEBUG
 	Serial.print("ButtonValue is...");
-	Serial.println(buttonValue);
+	Serial.println(currentButton);
     delay(2000);
 #endif
 
@@ -343,28 +302,37 @@ void loop(void)
 
 byte getButtonPushed()
 {
-/*	buttonValue = analogRead(analogSwitchPin); //Read analog value from A5 pin
 
-	if(buttonValue < 1000)
-		delay(100);
-
-	if(buttonValue >= 24 && buttonValue <= 36)
-		return 1;
-	if(buttonValue >= 16 && buttonValue <= 22)
-		return 2;
-	if(buttonValue >= 4 && buttonValue <= 10)
-		return 3;
-	return 0;
-*/
-
-	for(byte i = 1; i < 4; i++)
+	int reading = digitalRead(pinButton1);
+	if ( (millis() - lastDebounceTime) > debounceDelay) 
 	{
-		bs = delayDebounce(bs, i);
-
-		if(bs == 2 || bs == 3)
-			return i;
+		if(reading == 0)
+		{
+			lastDebounceTime = millis();
+			return 1;  
+	  	}
 	}
-	return 0;
+
+	int reading2 = digitalRead(pinButton2);
+	if ( (millis() - lastDebounceTime2) > debounceDelay) 
+	{
+		if(reading2 == 0)
+		{
+			lastDebounceTime2 = millis();
+			return 2;  
+	  	}
+  	}
+
+	int reading3 = digitalRead(pinButton3);
+	if ( (millis() - lastDebounceTime3) > debounceDelay) 
+	{
+		if(reading3 == 0)
+		{
+			lastDebounceTime3 = millis();
+			return 3;
+		}
+  	}
+	return 0; //nothing pushed :P
 }
 
 ///////////////////////////////////////// WEBSERVER //////////////////////////////////////////////////////////
@@ -380,7 +348,6 @@ void WebserverStart()
 
 				if (requestString.length() < 100) {
 					requestString += c;
-					//Serial.print(c);
 				}
 
 				//if HTTP request has ended
@@ -591,38 +558,4 @@ void reloadLeds()
 		digitalWrite(relayTwoLed, LOW);
 	else
 		digitalWrite(relayTwoLed, HIGH);
-}
-
-//enum ButtonStates {  1= UP, 2= DOWN, 3 = PRESS, 4 = RELEASE };
- 
-byte delayDebounce(byte button_state, byte button) {        
-    if (read_button(button)){                      /* if pressed     */
-        if (button_state == 3){
-            button_state = 2;
-        } 
-        if (button_state == 1){
-            _delay_ms(5);
-            if (read_button(button) == 1){
-                button_state = 3;
-            }
-        } 
-    } else {                                 /* if not pressed */
-        if (button_state == 4){
-            button_state = 1;
-        } 
-        if (button_state == 2){
-            if (read_button(button) == 0){
-                _delay_ms(15);
-                if (read_button(button) == 0){
-                    button_state = 4;
-                }
-            }
-        }
-    }
-    return button_state;
-}
-
-bool read_button(byte button)
-{
-	return digitalRead(button) == 0;
 }
