@@ -1,4 +1,4 @@
-// OL7M PolickoTempCommander v1.0 20170212 for 2 thermostatic sensors + 5 normal ds18bs20
+// OL7M PolickoTempCommander v1.5 20181103 for 2 thermostatic sensors + 5 normal ds18bs20
 // cc by DM5XX @ GPL
 // LLAP! 
 
@@ -7,19 +7,39 @@
 #include <Ethernet.h> // Used for Ethernet
 
 //#define SERIALDEBUG;
+//#define SHOWTEMP;
 
 OneWire oneWire(2); //Pin for ONE-WIRE-BUS
 DallasTemperature sensors(&oneWire);
 
 //DeviceAdressen der einzelnen ds1820 Temperatursensoren angeben. (loop anpassen)
-DeviceAddress s1 = { 0x28, 0xFF, 0x19, 0x20, 0x01, 0x16, 0x03, 0xB8 }; // this will be thermostatic sensor #1   KD uvnitr
-DeviceAddress s2 = { 0x28, 0xFF, 0x16, 0x60, 0x87, 0x16, 0x03, 0x84 }; // this will be thermostatic sensor #2      Koupelna
+DeviceAddress s1 = { 0x28, 0xFF, 0x19, 0x20, 0x01, 0x16, 0x03, 0xB8 }; // this will be thermostatic sensor #1     KD uvnitr
+DeviceAddress s2 = { 0x28, 0x62, 0xAD, 0xC4, 0x04, 0x00, 0x00, 0xC5 }; // this will be thermostatic sensor #2     Koupelna
 DeviceAddress s3 = { 0x28, 0xFF, 0x13, 0x3E, 0x01, 0x16, 0x03, 0x28 }; // normal temp sensor                      KD drez
 DeviceAddress s4 = { 0x28, 0xFF, 0x4E, 0x07, 0x01, 0x16, 0x03, 0x8A }; // normal temp sensor                      Venku
 DeviceAddress s5 = { 0x28, 0xFF, 0x8D, 0xF3, 0x87, 0x16, 0x03, 0x2A }; // normal temp sensor                      Loznice 
 DeviceAddress s6 = { 0x28, 0xFF, 0x99, 0xE2, 0x00, 0x16, 0x03, 0xE6 }; // normal temp sensor                      Studna
-DeviceAddress s7 = { 0x28, 0xFF, 0xF9, 0xB5, 0x87, 0x16, 0x03, 0xB1 }; // normal temp sensor                         Koupelna podlaha
+DeviceAddress s7 = { 0x28, 0xFF, 0xF9, 0xB5, 0x87, 0x16, 0x03, 0xB1 }; // high temp sensor                      Koupelna podlaha
 /*
+
+uint8_t pin2[][8] = {
+  {
+0x28, 0x62, 0xAD, 0xC4, 0x04, 0x00, 0x00, 0xC5  },
+  {
+0x28, 0xFF, 0x4E, 0x07, 0x01, 0x16, 0x03, 0x8A  },
+  {
+0x28, 0xFF, 0x19, 0x20, 0x01, 0x16, 0x03, 0xB8  },
+  {
+0x28, 0xFF, 0x99, 0xE2, 0x00, 0x16, 0x03, 0xE6  },
+  {
+0x28, 0xFF, 0xF9, 0xB5, 0x87, 0x16, 0x03, 0xB1  },
+  {
+0x28, 0xFF, 0x8D, 0xF3, 0x87, 0x16, 0x03, 0x2A  },
+  {
+0x28, 0xFF, 0x13, 0x3E, 0x01, 0x16, 0x03, 0x28  },
+};
+
+
 Use Example sketch at Onewire library example dir called DS18x20_Temperature.pde to get the adress values
 ROM = 28 A8 20 B6 6 0 0 52
 ROM = 28 A4 98 B4 6 0 0 59
@@ -63,6 +83,12 @@ const byte relayOneLed = 4; // Pin for relay1 status led
 const byte relayTwoLed = 5; // Pin for relay2 status led
 const byte analogSwitchPin = A5; // Use A5 as analog input for switches
 
+const byte pinButton1 = 2; // Pin button 1
+const byte pinButton2 = 8; // Pin button 2
+const byte pinButton3 = 9; // Pin button 3
+
+byte bs; // bounce state;
+
 const byte mac[] = { 0xDE, 0x00, 0xBA, 0xEF, 0x88, 0x73 };
 const byte ip[] = { 192, 168, 11, 208 };
 const byte gateway[] = { 192, 168, 11, 1 };
@@ -88,9 +114,9 @@ unsigned long lastButtonPressed = 0;  // the last time a button was pressed...
 
 void setup(void)
 {
-//#ifdef SERIALDEBUG
-	Serial.begin(57600);
-//#endif
+#ifdef SHOWTEMP
+	Serial.begin(115200);
+#endif
 
 	sensors.begin();
 	sensors.setResolution(s1, 10);
@@ -106,37 +132,72 @@ void setup(void)
 
 	Ethernet.begin(mac, ip); // Client starten
 
-//#ifdef SERIALDEBUG
+#ifdef SHOWTEMP
 	Serial.print("server is at ");
 	Serial.println(Ethernet.localIP());
-//#endif
+#endif
 
-	digitalWrite(relais1, HIGH);
-	digitalWrite(relais2, HIGH);
 
 	pinMode(manualLed, OUTPUT);
 	pinMode(relayOneLed, OUTPUT);
 	pinMode(relayTwoLed, OUTPUT);
 
+	pinMode(pinButton1, INPUT);
+	pinMode(pinButton2, INPUT);
+	pinMode(pinButton3, INPUT);
+
+	digitalWrite(relais1, LOW);
+	digitalWrite(relais2, LOW);
+
 	sensors.requestTemperatures();
-  //#ifdef SERIALDEBUG
-    Serial.println("Now requesting values from the Sensors...");
-//#endif
+	delay(200);
+	fillTempVariables();
+
+#ifdef SERIALDEBUG
+    Serial.println("Values requersted from the Sensors...");
+#endif
 
 	reloadLeds();
 }
 
-float getTemperature(DeviceAddress deviceAddress)
+void fillTempVariables()
 {
+	temp1 = getTemperature(s1, false);
+	temp2 = getTemperature(s2, false);
+	temp3 = getTemperature(s3, false);
+	temp4 = getTemperature(s4, false);
+	temp5 = getTemperature(s5, false);
+	temp6 = getTemperature(s6, false);
+	temp7 = getTemperature(s7, true);
+}
+
+float getTemperature(DeviceAddress deviceAddress, bool isHighTempSensor)
+{
+	byte counter = 0;
+	float upperTempLevel = 50.00;
 	float tempC = sensors.getTempC(deviceAddress);
-	if (tempC == -127.00) {
-#ifdef SERIALDEBUG
-		Serial.print("Error getting temperature");
-#endif
+	delay(50);
+
+	if(isHighTempSensor)
+		upperTempLevel = 90.00;
+
+	while(tempC < -30.00 || tempC > upperTempLevel) {
+
+		if(counter == 5)
+			return upperTempLevel;
+
+		#ifdef SHOWTEMP
+			Serial.print("Temperature Error ");
+			Serial.print(counter);
+			Serial.print(" ");
+			Serial.println(tempC);
+		#endif
+		tempC = sensors.getTempC(deviceAddress);
+		delay(100);
+
+		counter++;
 	}
-	else {
-		return tempC;
-	}
+	return tempC;
 }
 
 void loop(void)
@@ -147,24 +208,58 @@ void loop(void)
 	if ((lastSensorReading + readSensorsEvery) < currentMillis)
 	{
 		sensors.requestTemperatures();
+		delay(200);
 		lastSensorReading = millis();
-//#ifdef SERIALDEBUG
-		Serial.println("Now requesting values from the Sensors...");
-//#endif
+#ifdef SHOWTEMP
+		Serial.println("Values are requester from the Sensors...");
+#endif
+		fillTempVariables();
+#ifdef SERIALDEBUG
+	Serial.print("S1 ");
+	Serial.print(temp1);
+	Serial.println(" Celsius");
+
+	Serial.print("S2 ");
+	Serial.print(temp2);
+	Serial.println(" Celsius");
+
+	Serial.print("S3 ");
+	Serial.print(temp3);
+	Serial.println(" Celsius");
+
+	Serial.print("S4 ");
+	Serial.print(temp4);
+	Serial.println(" Celsius");
+
+	Serial.print("S5 ");
+	Serial.print(temp5);
+	Serial.println(" Celsius");
+
+	Serial.print("S6 ");
+	Serial.print(temp6);
+	Serial.println(" Celsius");
+
+	Serial.print("S7 ");
+	Serial.print(temp7);
+	Serial.println(" Celsius");
+#endif // SERIALDEBUG
+
 	}
 
-	buttonValue = analogRead(analogSwitchPin); //Read analog value from A5 pin
-
+	byte currentButton = getButtonPushed();
+	
 #ifdef SERIALDEBUG
+	Serial.print("ButtonValue is...");
 	Serial.println(buttonValue);
-  delay(2000);
+    delay(2000);
 #endif
 
-	if (buttonValue >= 24 && buttonValue <= 32 && isNotLocked) {
+	if (currentButton == 1 && isNotLocked) {
 		if (isInManualMode)
 		{
 #ifdef SERIALDEBUG
-			Serial.println("Switching from MANUAL mode to AUTOMATIC mode...");
+			Serial.println(buttonValue);
+ 			Serial.println("Switching from MANUAL mode to AUTOMATIC mode...");
 #endif
 			digitalWrite(manualLed, LOW);
 			isInManualMode = false;
@@ -172,7 +267,8 @@ void loop(void)
 		else
 		{
 #ifdef SERIALDEBUG
-			Serial.println("Switching from AUTOMATIC mode to MANUAL mode...");
+			Serial.println(buttonValue);
+ 			Serial.println("Switching from AUTOMATIC mode to MANUAL mode...");
 #endif
 			digitalWrite(manualLed, HIGH);
 			isInManualMode = true;
@@ -181,32 +277,28 @@ void loop(void)
 		reloadLeds();
 	}
 
-	/// termostat sensors s1 and s2
-	temp1 = getTemperature(s1);
- delay(20);
-	temp2 = getTemperature(s2);
-delay(20);
-
 	if (isInManualMode) // so somebody pressed the button...
 	{
 		// for the secondbutton aka relay1
-		if (buttonValue >= 16 && buttonValue <= 22 && isNotLocked) {
+		if (currentButton == 2 && isNotLocked) {
 			if (relayOneIsOn)
 			{
 #ifdef SERIALDEBUG
-				Serial.println("Switching OFF Relay1 in manual mode");
+				Serial.println(buttonValue);
+ 				Serial.println("Switching OFF Relay1 in manual mode");
 #endif
 				digitalWrite(relayOneLed, LOW);
-				digitalWrite(relais1, HIGH);
+				digitalWrite(relais1, LOW);
 				relayOneIsOn = false;
 			}
 			else
 			{
 #ifdef SERIALDEBUG
-				Serial.println("Switching ON Relay1 in manual mode");
+				Serial.println(buttonValue);
+ 				Serial.println("Switching ON Relay1 in manual mode");
 #endif
 				digitalWrite(relayOneLed, HIGH);
-				digitalWrite(relais1, LOW);
+				digitalWrite(relais1, HIGH);
 				relayOneIsOn = true;
 			}
 			lastButtonPressed = millis();
@@ -214,23 +306,25 @@ delay(20);
 		}
 
 		//For 3rd button aka relay2
-		if (buttonValue >= 4 && buttonValue <= 10 && isNotLocked) {
+		if (currentButton == 3 && isNotLocked) {
 			if (relayTwoIsOn)
 			{
 #ifdef SERIALDEBUG
-				Serial.println("Switching OFF Relay2 in manual mode");
+				Serial.println(buttonValue);
+ 				Serial.println("Switching OFF Relay2 in manual mode");
 #endif
 				digitalWrite(relayTwoLed, LOW);
-				digitalWrite(relais2, HIGH);
+				digitalWrite(relais2, LOW);
 				relayTwoIsOn = false;
 			}
 			else
 			{
 #ifdef SERIALDEBUG
-				Serial.println("Switching ON Relay2 in manual mode");
+				Serial.println(buttonValue);
+ 				Serial.println("Switching ON Relay2 in manual mode");
 #endif
 				digitalWrite(relayTwoLed, HIGH);
-				digitalWrite(relais2, LOW);
+				digitalWrite(relais2, HIGH);
 				relayTwoIsOn = true;
 			}
 			lastButtonPressed = millis();
@@ -239,61 +333,39 @@ delay(20);
 	}
 	else
 	{
+		if(currentButton == 2 || currentButton == 3)
+			isInManualMode = true;
 		termostaticControl();
 	}
 /// end
-
-	temp3 = getTemperature(s3);
- delay(20);
-	temp4 = getTemperature(s4);
- delay(20);
-	temp5 = getTemperature(s5);
- delay(20);
-	temp6 = getTemperature(s6);
- delay(20);
-	temp7 = getTemperature(s7);
- delay(20);
-
-#ifdef SERIALDEBUG
-	Serial.print("S1 ");
-	Serial.print(temp1);
-	Serial.println(" Celsius");
-	Serial.println();
-
-	Serial.print("S2 ");
-	Serial.print(temp2);
-	Serial.println(" Celsius");
-	Serial.println();
-
-	Serial.print("S3 ");
-	Serial.print(temp3);
-	Serial.println(" Celsius");
-	Serial.println();
-
-	Serial.print("S4 ");
-	Serial.print(temp4);
-	Serial.println(" Celsius");
-	Serial.println();
-
-	Serial.print("S5 ");
-	Serial.print(temp5);
-	Serial.println(" Celsius");
-	Serial.println();
-
-	Serial.print("S6 ");
-	Serial.print(temp6);
-	Serial.println(" Celsius");
-	Serial.println();
-
-	Serial.print("S7 ");
-	Serial.print(temp7);
-	Serial.println(" Celsius");
-	Serial.println();
-#endif // SERIALDEBUG
-
 	WebserverStart();
 }
 
+byte getButtonPushed()
+{
+/*	buttonValue = analogRead(analogSwitchPin); //Read analog value from A5 pin
+
+	if(buttonValue < 1000)
+		delay(100);
+
+	if(buttonValue >= 24 && buttonValue <= 36)
+		return 1;
+	if(buttonValue >= 16 && buttonValue <= 22)
+		return 2;
+	if(buttonValue >= 4 && buttonValue <= 10)
+		return 3;
+	return 0;
+*/
+
+	for(byte i = 1; i < 4; i++)
+	{
+		bs = delayDebounce(bs, i);
+
+		if(bs == 2 || bs == 3)
+			return i;
+	}
+	return 0;
+}
 
 ///////////////////////////////////////// WEBSERVER //////////////////////////////////////////////////////////
 
@@ -335,6 +407,8 @@ void WebserverStart()
 							 if (requestValue == 0)
 							 {
 								 isInManualMode = false;
+								 relayOneIsOn = false;
+								 relayTwoIsOn = false;
 							 }
 						 }
 						 else if (command == 1)
@@ -463,7 +537,7 @@ void termostaticControl()
 #ifdef SERIALDEBUG
 		Serial.println("Switching on Relay1 its too cold...");
 #endif
-		digitalWrite(relais1, LOW);
+		digitalWrite(relais1, HIGH);
 		relayOneIsOn = true;
 		reloadLeds();
 	}
@@ -472,7 +546,7 @@ void termostaticControl()
 #ifdef SERIALDEBUG
 		Serial.println("Switching off Relay1 its too hot...");
 #endif
-		digitalWrite(relais1, HIGH);
+		digitalWrite(relais1, LOW);
 		relayOneIsOn = false;
 		reloadLeds();
 	}
@@ -482,7 +556,7 @@ void termostaticControl()
 #ifdef SERIALDEBUG
 		Serial.println("Switching on Relay2 its too cold...");
 #endif
-		digitalWrite(relais2, LOW);
+		digitalWrite(relais2, HIGH);
 		relayTwoIsOn = true;
 		reloadLeds();
 	}
@@ -491,7 +565,7 @@ void termostaticControl()
 #ifdef SERIALDEBUG
 		Serial.println("Switching off Relay2 its too hot...");
 #endif
-		digitalWrite(relais2, HIGH);
+		digitalWrite(relais2, LOW);
 		relayTwoIsOn = false;
 		reloadLeds();
 	}
@@ -509,12 +583,46 @@ void reloadLeds()
 		digitalWrite(manualLed, LOW);
 
 	if (relayOneIsOn)
-		digitalWrite(relayOneLed, HIGH);
-	else
 		digitalWrite(relayOneLed, LOW);
+	else
+		digitalWrite(relayOneLed, HIGH);
 
 	if (relayTwoIsOn)
-		digitalWrite(relayTwoLed, HIGH);
-	else
 		digitalWrite(relayTwoLed, LOW);
+	else
+		digitalWrite(relayTwoLed, HIGH);
+}
+
+//enum ButtonStates {  1= UP, 2= DOWN, 3 = PRESS, 4 = RELEASE };
+ 
+byte delayDebounce(byte button_state, byte button) {        
+    if (read_button(button)){                      /* if pressed     */
+        if (button_state == 3){
+            button_state = 2;
+        } 
+        if (button_state == 1){
+            _delay_ms(5);
+            if (read_button(button) == 1){
+                button_state = 3;
+            }
+        } 
+    } else {                                 /* if not pressed */
+        if (button_state == 4){
+            button_state = 1;
+        } 
+        if (button_state == 2){
+            if (read_button(button) == 0){
+                _delay_ms(15);
+                if (read_button(button) == 0){
+                    button_state = 4;
+                }
+            }
+        }
+    }
+    return button_state;
+}
+
+bool read_button(byte button)
+{
+	return digitalRead(button) == 0;
 }
