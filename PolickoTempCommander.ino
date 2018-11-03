@@ -1,5 +1,5 @@
 // OL7M PolickoTempCommander v1.5 20181103 for 2 thermostatic sensors + 5 normal ds18bs20
-// cc by DM5XX @ GPL
+// cc by DM5XX @ CC License: BY-NC-ND
 // LLAP! 
 
 #include <OneWire.h>
@@ -22,12 +22,12 @@ DeviceAddress s6 = { 0x28, 0xFF, 0x99, 0xE2, 0x00, 0x16, 0x03, 0xE6 }; // normal
 DeviceAddress s7 = { 0x28, 0xFF, 0xF9, 0xB5, 0x87, 0x16, 0x03, 0xB1 }; // high temp sensor                      Koupelna podlaha
 
 //////////////// Values for automatic mode aka thermostatic mode ////////////////////////////////////////////////
-const float temp1Min = 21.0; // if temperature is below this level (s1), Relay 1 will be switched on, until... 
-const float temp1Max = 25.0; // ...temperature of s1 will reach this level, so relay 1 will be switched off!
+const float temp1Min = 0.00; // if temperature is below this level (s1), Relay 1 will be switched on, until... 
+const float temp1Max = 2.00; // ...temperature of s1 will reach this level, so relay 1 will be switched off!
 							 // Relay 1 will be remain switched off, until temperature measured from s1 will fall below temp1Min again
 
-const float temp2Min = 22.0; // if temperature is below this level (s2), Relay 2 will be switched on, until...
-const float temp2Max = 25.0; // ...temperature at s2 will reach this level, so relay 2 will be switched off!
+const float temp2Min = 0.00; // if temperature is below this level (s2), Relay 2 will be switched on, until...
+const float temp2Max = 2.00; // ...temperature at s2 will reach this level, so relay 2 will be switched off!
 							 // Relay 2 will be remain switched off, until temperature measured from s2 will fall below temp2Min again
 
 int readSensorsEvery = 30000; // read sensors every 30 seconds...
@@ -39,7 +39,6 @@ const byte relais2 = 7; // Pin for Relay #1 controlled by Sensor #2 s2
 const byte manualLed = 3; // Pin for manualmode indicator led
 const byte relayOneLed = 4; // Pin for relay1 status led
 const byte relayTwoLed = 5; // Pin for relay2 status led
-const byte analogSwitchPin = A5; // Use A5 as analog input for switches
 
 const byte pinButton1 = A4; // Pin button 1
 const byte pinButton2 = 8; // Pin button 2
@@ -63,7 +62,6 @@ boolean relayOneIsOn = false;
 boolean relayTwoIsOn = false;
 String requestString;
 
-int buttonValue; //Stores analog value when button is pressed
 unsigned long lastSensorReading = 0;  // the last time the sensors are called...
 unsigned long lastButtonPressed = 0;  // the last time a button was pressed...
 
@@ -208,7 +206,7 @@ void loop(void)
 	byte currentButton = getButtonPushed();
 	
 #ifdef SERIALDEBUG
-	Serial.print("ButtonValue is...");
+	Serial.print("Current Button is...");
 	Serial.println(currentButton);
     delay(2000);
 #endif
@@ -217,7 +215,6 @@ void loop(void)
 		if (isInManualMode)
 		{
 #ifdef SERIALDEBUG
-			Serial.println(buttonValue);
  			Serial.println("Switching from MANUAL mode to AUTOMATIC mode...");
 #endif
 			digitalWrite(manualLed, LOW);
@@ -226,7 +223,6 @@ void loop(void)
 		else
 		{
 #ifdef SERIALDEBUG
-			Serial.println(buttonValue);
  			Serial.println("Switching from AUTOMATIC mode to MANUAL mode...");
 #endif
 			digitalWrite(manualLed, HIGH);
@@ -243,7 +239,6 @@ void loop(void)
 			if (relayOneIsOn)
 			{
 #ifdef SERIALDEBUG
-				Serial.println(buttonValue);
  				Serial.println("Switching OFF Relay1 in manual mode");
 #endif
 				digitalWrite(relayOneLed, LOW);
@@ -253,7 +248,6 @@ void loop(void)
 			else
 			{
 #ifdef SERIALDEBUG
-				Serial.println(buttonValue);
  				Serial.println("Switching ON Relay1 in manual mode");
 #endif
 				digitalWrite(relayOneLed, HIGH);
@@ -269,7 +263,6 @@ void loop(void)
 			if (relayTwoIsOn)
 			{
 #ifdef SERIALDEBUG
-				Serial.println(buttonValue);
  				Serial.println("Switching OFF Relay2 in manual mode");
 #endif
 				digitalWrite(relayTwoLed, LOW);
@@ -279,7 +272,6 @@ void loop(void)
 			else
 			{
 #ifdef SERIALDEBUG
-				Serial.println(buttonValue);
  				Serial.println("Switching ON Relay2 in manual mode");
 #endif
 				digitalWrite(relayTwoLed, HIGH);
