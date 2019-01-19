@@ -72,9 +72,9 @@ long debounceDelay = 50;    // the debounce time; increase if the output flicker
 
 void setup(void)
 {
-#ifdef SHOWTEMP
+//#ifdef SHOWTEMP
 	Serial.begin(115200);
-#endif
+//#endif
 
 	sensors.begin();
 	sensors.setResolution(s1, 10);
@@ -208,6 +208,10 @@ void loop(void)
 #ifdef SERIALDEBUG
 	Serial.print("Current Button is...");
 	Serial.println(currentButton);
+	if (isInManualMode)
+	{
+		Serial.println("I am in manual Mode");
+	}
     delay(2000);
 #endif
 
@@ -359,19 +363,32 @@ void WebserverStart()
 
 						 if (command == 9)
 						 {
-							 if (requestValue == 1)
+							 if (requestValue == 1) // manual mode on
 							 {
-								 isInManualMode = true;
+#ifdef SERIALDEBUG
+								 Serial.println("Switching to manual mode");
+#endif
+								digitalWrite(manualLed, HIGH);
+								isInManualMode = true;
 							 }
-							 if (requestValue == 0)
+							 if (requestValue == 0) // automatic mode on
 							 {
-								 isInManualMode = false;
-								 relayOneIsOn = false;
-								 relayTwoIsOn = false;
+#ifdef SERIALDEBUG
+								 Serial.println("Switching to automatic mode");
+#endif
+								digitalWrite(manualLed, LOW);
+								digitalWrite(relayOneLed, LOW);
+								digitalWrite(relais1, LOW);
+								relayOneIsOn = false;
+								digitalWrite(relayTwoLed, LOW);
+								digitalWrite(relais2, LOW);
+								relayTwoIsOn = false;
+								isInManualMode = false;
 							 }
 						 }
 						 else if (command == 1)
 						 {
+							 digitalWrite(manualLed, HIGH);
 							 isInManualMode = true;
 
 							 if (requestValue == 1)
@@ -379,22 +396,23 @@ void WebserverStart()
 #ifdef SERIALDEBUG
 								 Serial.println("Switching ON Relay1 in manual mode");
 #endif
-								 digitalWrite(relayOneLed, HIGH);
-								 digitalWrite(relais1, LOW);
-								 relayOneIsOn = true;
+								digitalWrite(relayOneLed, HIGH);
+								digitalWrite(relais1, HIGH);
+								relayOneIsOn = true;
 							 }
 							 else if (requestValue == 0)
 							 {
 #ifdef SERIALDEBUG
 								 Serial.println("Switching OFF Relay1 in manual mode");
 #endif
-								 digitalWrite(relayOneLed, LOW);
-								 digitalWrite(relais1, HIGH);
-								 relayOneIsOn = false;
+								digitalWrite(relayOneLed, LOW);
+								digitalWrite(relais1, LOW);
+								relayOneIsOn = false;
 							 }
 						 }
 						 else if (command == 2)
 						 {
+							 digitalWrite(manualLed, HIGH);
 							 isInManualMode = true;
 
 							 if (requestValue == 1)
@@ -402,18 +420,18 @@ void WebserverStart()
 #ifdef SERIALDEBUG
 								 Serial.println("Switching ON Relay2 in manual mode");
 #endif
-								 digitalWrite(relayTwoLed, HIGH);
-								 digitalWrite(relais2, LOW);
-								 relayTwoIsOn = true;
+								digitalWrite(relayTwoLed, HIGH);
+								digitalWrite(relais2, HIGH);
+								relayTwoIsOn = true;
 							 }
 							 else if (requestValue == 0)
 							 {
 #ifdef SERIALDEBUG
 								 Serial.println("Switching OFF Relay2 in manual mode");
 #endif
-								 digitalWrite(relayTwoLed, LOW);
-								 digitalWrite(relais2, HIGH);
-								 relayTwoIsOn = false;
+								digitalWrite(relayTwoLed, LOW);
+								digitalWrite(relais2, LOW);
+								relayTwoIsOn = false;
 							 }
 						 }
 						 reloadLeds();
@@ -491,6 +509,10 @@ void GetPage(EthernetClient client)
 
 void termostaticControl()
 {
+#ifdef SERIALDEBUG
+		Serial.println("I am in automatic Mode");
+		delay(300);
+#endif
 	if (temp1 < temp1Min && !relayOneIsOn)
 	{
 #ifdef SERIALDEBUG
