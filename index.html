@@ -1,0 +1,48 @@
+<html>
+    <meta http-equiv="Cache-control" content="no-cache"><meta http-equiv="Expires" content="0">
+    <script type="text/javascript" src="http://code.jquery.com/jquery-1.11.2.min.js"></script>
+    <script>
+          var configAddress='http://192.168.11.208';
+          var dataArray = [];
+    </script>
+    <script src="ptc.js"></script>
+<body>
+    <table border="1">
+        <tr>
+            <td>KD uvnitr</td>
+            <td>Koupelna</td>
+            <td>KD drez</td>
+            <td>Venku</td>
+            <td>Loznice</td>
+            <td>Studna</td>
+            <td>Koupelna podlaha</td>
+            <td>Mode</td>
+            <td>Relay1</td>    
+            <td>Relay2</td>    
+        </tr>
+        <tr>
+            <td id="s1"></td>
+            <td id="s2"></td>
+            <td id="s3"></td>
+            <td id="s4"></td>
+            <td id="s5"></td>
+            <td id="s6"></td>
+            <td id="s7"></td>
+            <td id="mode"></td>
+            <td id="relay1"></td>    
+            <td id="relay2"></td>    
+        </tr>
+        <tr>
+            <td colspan="10">
+                    <button type="button" onclick="switchIt(0,1)">Manual</button> 
+                    <button type="button" onclick="switchIt(0,0)">Auto</button>
+                    <button type="button" onclick="switchIt(1,1)">Relay1On</button> 
+                    <button type="button" onclick="switchIt(1,0)">Relay1Off</button> 
+                    <button type="button" onclick="switchIt(2,1)">Relay2On</button> 
+                    <button type="button" onclick="switchIt(2,0)">Relay2Off</button> 
+                    Last sync: <span id="re"></span>
+            </td>
+        </tr>    
+    </table>
+</body>
+</html>
